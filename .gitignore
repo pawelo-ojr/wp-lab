@@ -1,0 +1,6 @@
+# Kopie zapasowe zawierają dane (także skróty haseł) — nie trafiają do repozytorium
+backup/*
+!backup/.gitkeep
+# Lokalne dane logowania (hasła aplikacji)
+integracja.env
+*.local.env

@@ -1,0 +1,2195 @@
+{
+  "info": {
+    "_postman_id": "ff01a2d1-9b44-5f7e-bf12-74de6e98104e",
+    "name": "PSS — WordPress REST API (LAB 04–06)",
+    "description": "Kolekcja referencyjna do stosu wp-lab (Projektowanie serwisów sieciowych, PBŚ).\n\nUruchomienie: zaimportuj kolekcję i środowisko `wp-lab.postman_environment.json`, wpisz hasła aplikacji (`admin_app_password`, `redaktor_app_password`) jako wartości lokalne i uruchom foldery po kolei.\n\nNewman (z katalogu wp-lab):\n`npx newman run postman/wordpress-rest.postman_collection.json -e postman/wp-lab.postman_environment.json --env-var admin_app_password=... --env-var redaktor_app_password=...`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "LAB 04 — stos Docker",
+      "id": "a0f5856d-590e-5ea2-9dd7-1a55203b871b",
+      "description": "Czy kontenery działają: WordPress (8080) i Mailpit (8025).",
+      "item": [
+        {
+          "name": "Strona główna — nagłówek Link do API",
+          "id": "ac2be4b7-3d6a-5507-87f3-0645e2abb3b2",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{wp_url}}/",
+            "description": "Każda strona WordPressa wskazuje adres REST API w nagłówku `Link` (odkrywanie API). Po włączeniu ładnych odnośników adres ma postać `/wp-json/`, bez nich `?rest_route=/`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nagłówek Link wskazuje REST API', () => {",
+                  "    const link = pm.response.headers.get('Link');",
+                  "    pm.expect(link).to.include('rel=\"https://api.w.org/\"');",
+                  "});",
+                  "pm.test('Ładne odnośniki są włączone (/wp-json/ w nagłówku Link)', () => {",
+                  "    pm.expect(pm.response.headers.get('Link')).to.include('/wp-json/');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mailpit — wersja (API)",
+          "id": "95e0258b-52c8-5383-8cd0-c196f4473958",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{mailpit_url}}/api/v1/info",
+            "description": "Mailpit ma własne REST API. Tu sprawdzamy tylko, że działa."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Odpowiedź zawiera wersję Mailpita', () => pm.expect(pm.response.json()).to.have.property('Version'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LAB 05 — REST API WordPressa",
+      "id": "1c3edcfb-4771-56bc-aec9-77933da63663",
+      "description": "Odkrywanie, paginacja, uwierzytelnianie, CRUD, pliki, CPT, użytkownicy.",
+      "item": [
+        {
+          "name": "1. Odkrywanie API",
+          "id": "d358c29d-691c-5e7d-a925-c63e75e77090",
+          "description": "Indeks tras, alternatywny adres `?rest_route=` i samodokumentacja (OPTIONS).",
+          "item": [
+            {
+              "name": "Indeks API /wp-json/",
+              "id": "3cda88cf-c93b-5e6f-96f2-861b6131d204",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/",
+                "description": "Indeks: nazwa strony, przestrzenie nazw (`namespaces`) i dostępne metody uwierzytelniania."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200 i JSON', () => {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                      "});",
+                      "const indeks = pm.response.json();",
+                      "pm.test('Jest przestrzeń wp/v2', () => pm.expect(indeks.namespaces).to.include('wp/v2'));",
+                      "pm.test('Hasła aplikacji są dostępne (WP_ENVIRONMENT_TYPE=local)', () => {",
+                      "    pm.expect(indeks.authentication).to.have.property('application-passwords');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Indeks przez ?rest_route=/",
+              "id": "d60d771e-8297-53b6-b496-a913a58bdb33",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/?rest_route=/",
+                "description": "Ten adres działa zawsze — także bez ładnych odnośników (gdy `/wp-json/` zwraca HTML strony głównej)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200 i JSON', () => {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                      "});",
+                      "pm.test('To ten sam indeks (pole namespaces)', () => pm.expect(pm.response.json().namespaces).to.include('wp/v2'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "OPTIONS /wp/v2/posts — samodokumentacja",
+              "id": "a9c615b1-d965-5f47-8084-6fa1dcbf1007",
+              "request": {
+                "method": "OPTIONS",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts",
+                "description": "OPTIONS zwraca opis trasy: metody, argumenty i schemat JSON zasobu."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "const opis = pm.response.json();",
+                      "pm.test('Trasa obsługuje GET i POST', () => {",
+                      "    const metody = opis.endpoints.flatMap((e) => e.methods);",
+                      "    pm.expect(metody).to.include.members(['GET', 'POST']);",
+                      "});",
+                      "pm.test('Jest schemat zasobu „post”', () => pm.expect(opis.schema.title).to.eql('post'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "2. Odczyt i paginacja",
+          "id": "734ebaba-6f29-54a2-a29a-43122b278fc6",
+          "description": "Parametry `per_page`, `page`, `_fields` i nagłówki `X-WP-Total`, `X-WP-TotalPages`.",
+          "item": [
+            {
+              "name": "Lista wpisów — paginacja",
+              "id": "3665648a-1ec1-5b90-b12c-0f4fd3385ea7",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts?per_page=5&page=1",
+                "description": "Nagłówki paginacji: `X-WP-Total` (liczba wpisów) i `X-WP-TotalPages` (liczba stron)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "const total = Number(pm.response.headers.get('X-WP-Total'));",
+                      "const strony = Number(pm.response.headers.get('X-WP-TotalPages'));",
+                      "pm.test('Nagłówki X-WP-Total i X-WP-TotalPages są liczbami', () => {",
+                      "    pm.expect(total).to.be.at.least(0);",
+                      "    pm.expect(strony).to.be.at.least(0);",
+                      "});",
+                      "pm.test('Liczba stron = ceil(total / per_page)', () => pm.expect(strony).to.eql(Math.ceil(total / 5)));",
+                      "pm.test('Najwyżej 5 wpisów na stronie', () => pm.expect(pm.response.json().length).to.be.at.most(5));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "per_page=101 → 400",
+              "id": "c649468a-3957-505c-92de-6d649b193e39",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts?per_page=101",
+                "description": "Limit `per_page` to 100. Większa wartość to błąd klienta."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('Kod błędu WordPressa: rest_invalid_param', () => pm.expect(pm.response.json().code).to.eql('rest_invalid_param'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Strona spoza zakresu → 400",
+              "id": "4d015745-b106-58bb-9952-bba1c62d7c71",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts?page=9999",
+                "description": "Numer strony większy niż `X-WP-TotalPages`."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('Kod błędu WordPressa: rest_post_invalid_page_number', () => pm.expect(pm.response.json().code).to.eql('rest_post_invalid_page_number'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Wybrane pola (_fields)",
+              "id": "6a4ff5e0-ba41-51d6-be2e-d19634ab6eee",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts?per_page=3&_fields=id,title,link",
+                "description": "`_fields` ogranicza odpowiedź do wskazanych pól — mniej danych do przesłania."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Każdy wpis ma tylko pola id, title, link', () => {",
+                      "    pm.response.json().forEach((wpis) => pm.expect(Object.keys(wpis).sort()).to.eql(['id', 'link', 'title']));",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "3. Uwierzytelnianie",
+          "id": "68bdbd04-2f7d-5fc1-a986-884087bc8d43",
+          "description": "Application Passwords + Basic Auth. Hasła aplikacji są w zmiennych środowiska (`admin_app_password`, `redaktor_app_password`) — nie w kolekcji!",
+          "item": [
+            {
+              "name": "Kim jestem? — bez logowania → 401",
+              "id": "087c7195-c745-5fc6-8086-bd44e57c9378",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/users/me",
+                "description": "Bez nagłówka Authorization WordPress traktuje nas jak anonima."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                      "pm.test('Kod błędu WordPressa: rest_not_logged_in', () => pm.expect(pm.response.json().code).to.eql('rest_not_logged_in'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Kim jestem? — Application Password",
+              "id": "c8d1fb2c-86d6-55ab-aa44-2698fb572339",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/users/me?context=edit",
+                "description": "Basic Auth: login + hasło aplikacji (24 znaki; spacje można pominąć). `context=edit` pokazuje login i role.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Zmienna admin_app_password jest ustawiona w środowisku', () => {",
+                      "    pm.expect(pm.environment.get('admin_app_password') || pm.variables.get('admin_app_password')).to.be.a('string').and.not.empty;",
+                      "});",
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "const ja = pm.response.json();",
+                      "pm.test('Login zgadza się z admin_user', () => pm.expect(ja.username).to.eql(pm.variables.get('admin_user')));",
+                      "pm.test('Rola administrator', () => pm.expect(ja.roles).to.include('administrator'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Złe hasło aplikacji → 401",
+              "id": "8fde72ab-9e95-5338-8186-e52a72008559",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/users/me",
+                "description": "Błędne hasło aplikacji: 401 (WordPress nie zdradza, czy zły był login, czy hasło).",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "abcd abcd abcd abcd abcd abcd",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "4. CRUD wpisów",
+          "id": "c55320fd-b927-50c1-bb8f-47305664b5e7",
+          "description": "Pełny cykl życia wpisu i kody statusu: 201, 200, 410, 404, 401, 403.",
+          "item": [
+            {
+              "name": "Utwórz wpis bez logowania → 401",
+              "id": "f18f1f5c-1e26-5e47-911c-36dd456c4bd1",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts",
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Nie powinien powstać\",\n  \"status\": \"publish\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                      "pm.test('Kod błędu WordPressa: rest_cannot_create', () => pm.expect(pm.response.json().code).to.eql('rest_cannot_create'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Utwórz wpis → 201",
+              "id": "a2743fb9-22a4-5f4c-b504-aac48ac49f6c",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts",
+                "description": "Nowy wpis. Odpowiedź 201 ma nagłówek `Location` z adresem zasobu; `id` zapisujemy w zmiennej kolekcji.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Pomiar z czujnika T-01 ({{$timestamp}})\",\n  \"content\": \"Temperatura: 21,5 °C\",\n  \"status\": \"publish\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                      "const wpis = pm.response.json();",
+                      "pm.collectionVariables.set('post_id', wpis.id);",
+                      "pm.test('Nagłówek Location wskazuje nowy wpis', () => {",
+                      "    pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/wp/v2/posts/' + wpis.id + '$'));",
+                      "});",
+                      "pm.test('Wpis jest opublikowany', () => pm.expect(wpis.status).to.eql('publish'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Odczytaj wpis",
+              "id": "b2a80cca-f8a1-5962-aae2-742a3722b6c6",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts/{{post_id}}",
+                "description": "Opublikowany wpis może odczytać każdy (bez logowania)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('To ten sam wpis', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('post_id'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Zmień tytuł (PATCH) → 200",
+              "id": "a57365bb-5bc6-5037-989a-699a91037e6c",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts/{{post_id}}",
+                "description": "Edycja: POST, PUT albo PATCH na `/wp/v2/posts/<id>` — wysyłamy tylko zmieniane pola.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Pomiar z czujnika T-01 (poprawiony)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Tytuł został zmieniony', () => pm.expect(pm.response.json().title.raw).to.eql('Pomiar z czujnika T-01 (poprawiony)'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Redaktor zakłada użytkownika → 403",
+              "id": "a285af7b-9573-5e7e-ae3c-7b38242ffad4",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/users",
+                "description": "Redaktor jest zalogowany, ale nie ma uprawnienia `create_users`: 403 (a nie 401).",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{redaktor_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{redaktor_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"intruz\",\n  \"email\": \"intruz@example.com\",\n  \"password\": \"Haslo-1234-abcd\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 403', () => pm.response.to.have.status(403));",
+                      "pm.test('Kod błędu WordPressa: rest_cannot_create_user', () => pm.expect(pm.response.json().code).to.eql('rest_cannot_create_user'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń wpis (do kosza) → 200",
+              "id": "2c0e2108-b33d-569c-b2f1-440869a93feb",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts/{{post_id}}",
+                "description": "Bez `force` wpis trafia do kosza.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Wpis jest w koszu', () => pm.expect(pm.response.json().status).to.eql('trash'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń ponownie bez force → 410",
+              "id": "938f1819-937c-54c3-bebd-88ef0c3afd14",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts/{{post_id}}",
+                "description": "410 Gone: wpis jest już w koszu.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 410', () => pm.response.to.have.status(410));",
+                      "pm.test('Kod błędu WordPressa: rest_already_trashed', () => pm.expect(pm.response.json().code).to.eql('rest_already_trashed'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń trwale (force=true) → 200",
+              "id": "7393e2b4-e9df-571e-9e6f-5d2c9366d550",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts/{{post_id}}?force=true",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('deleted = true, a w previous jest usunięty wpis', () => {",
+                      "    const wynik = pm.response.json();",
+                      "    pm.expect(wynik.deleted).to.eql(true);",
+                      "    pm.expect(wynik.previous.id).to.eql(Number(pm.collectionVariables.get('post_id')));",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Odczyt usuniętego wpisu → 404",
+              "id": "c6ed9bc1-2427-5fb1-b074-50312c45235d",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts/{{post_id}}",
+                "description": ""
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                      "pm.test('Kod błędu WordPressa: rest_post_invalid_id', () => pm.expect(pm.response.json().code).to.eql('rest_post_invalid_id'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "5. Pliki (/wp/v2/media)",
+          "id": "cce5091d-1cbb-52a7-a534-609c96291d6f",
+          "description": "Dwa sposoby wysyłania: body binarne + `Content-Disposition` albo `multipart/form-data`. Ścieżki plików są względne — w Postmanie ustaw Working directory na katalog wp-lab (Settings → General) albo wskaż plik ponownie.",
+          "item": [
+            {
+              "name": "Upload bez Content-Disposition → 400",
+              "id": "7038449f-16bc-5dfb-a18f-f57c24ec6b92",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "image/png"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/media",
+                "description": "Body binarne wymaga nagłówka `Content-Disposition` z nazwą pliku.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "file",
+                  "file": {
+                    "src": "pliki-testowe/czujnik-t01.png"
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('Kod błędu WordPressa: rest_upload_no_content_disposition', () => pm.expect(pm.response.json().code).to.eql('rest_upload_no_content_disposition'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload binarny → 201",
+              "id": "28814b94-a4e3-5670-8387-9e652b11c696",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "image/png"
+                  },
+                  {
+                    "key": "Content-Disposition",
+                    "value": "attachment; filename=\"czujnik-t01.png\""
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/media",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "file",
+                  "file": {
+                    "src": "pliki-testowe/czujnik-t01.png"
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                      "const plik = pm.response.json();",
+                      "pm.collectionVariables.set('media_id', plik.id);",
+                      "pm.test('To obraz PNG', () => {",
+                      "    pm.expect(plik.media_type).to.eql('image');",
+                      "    pm.expect(plik.mime_type).to.eql('image/png');",
+                      "});",
+                      "pm.test('Plik leży w /wp-content/uploads/', () => pm.expect(plik.source_url).to.include('/wp-content/uploads/'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload multipart/form-data → 201",
+              "id": "428314af-a1af-5e59-9963-dedf37c0df40",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/media",
+                "description": "Formularz: pole `file` (typ File) + dowolne pola zasobu, np. `title`, `alt_text`.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "pliki-testowe/czujnik-t01.png"
+                    },
+                    {
+                      "key": "title",
+                      "value": "Czujnik T-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "alt_text",
+                      "value": "Czujnik temperatury T-01 na ścianie laboratorium",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                      "const plik = pm.response.json();",
+                      "pm.collectionVariables.set('media2_id', plik.id);",
+                      "pm.test('Tekst alternatywny zapisany', () => pm.expect(plik.alt_text).to.eql('Czujnik temperatury T-01 na ścianie laboratorium'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Upload pliku .php → 500",
+              "id": "a647d781-efc8-5737-8aeb-73854b11bd4c",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/media",
+                "description": "WordPress odrzuca niedozwolony typ pliku, ale zwraca 500 (choć to błąd klienta) — temat do dyskusji.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "pliki-testowe/niebezpieczny.php"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 500', () => pm.response.to.have.status(500));",
+                      "pm.test('Kod błędu WordPressa: rest_upload_unknown_error', () => pm.expect(pm.response.json().code).to.eql('rest_upload_unknown_error'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń plik bez force → 501",
+              "id": "673048d4-20d4-5b7a-8489-10f74e943751",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/media/{{media_id}}",
+                "description": "Media nie mają kosza: 501 Not Implemented, trzeba dodać `force=true`.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 501', () => pm.response.to.have.status(501));",
+                      "pm.test('Kod błędu WordPressa: rest_trash_not_supported', () => pm.expect(pm.response.json().code).to.eql('rest_trash_not_supported'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń plik (force=true) → 200",
+              "id": "85f8c9db-a665-54c6-b6c4-5d26734fd8d1",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/media/{{media_id}}?force=true",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('deleted = true', () => pm.expect(pm.response.json().deleted).to.eql(true));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń drugi plik (force=true) → 200",
+              "id": "d9ff5f96-bb42-52cf-9e34-269f34c713c2",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/media/{{media2_id}}?force=true",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "6. Własny typ treści „czujnik”",
+          "id": "c7a24369-6b1f-51b7-8458-5875ddb27db3",
+          "description": "Typ `czujnik` (Custom Post Type UI, `rest_base` = `czujniki`) jest w REST, a prywatne zgłoszenia wtyczki — nie.",
+          "item": [
+            {
+              "name": "Typy treści w REST",
+              "id": "a2dd0e2a-ef17-5421-9ee2-e88640d9a922",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/types",
+                "description": ""
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "const typy = pm.response.json();",
+                      "pm.test('Typ czujnik ma trasę /wp/v2/czujniki', () => pm.expect(typy.czujnik.rest_base).to.eql('czujniki'));",
+                      "pm.test('Zgłoszeń (psszg_zgloszenie) NIE ma w REST', () => pm.expect(typy).to.not.have.property('psszg_zgloszenie'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dodaj czujnik → 201",
+              "id": "73571a55-ddac-5b4b-bcb0-9ae1f33d801e",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/czujniki",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Czujnik wilgotności H-02\",\n  \"content\": \"Sala 2.14, odczyt co 60 s.\",\n  \"status\": \"publish\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                      "const czujnik = pm.response.json();",
+                      "pm.collectionVariables.set('czujnik_id', czujnik.id);",
+                      "pm.test('Typ wpisu = czujnik', () => pm.expect(czujnik.type).to.eql('czujnik'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lista czujników (publiczna)",
+              "id": "77c36e01-c910-5755-99d3-c4c252c70a4f",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/czujniki?per_page=100",
+                "description": ""
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Nowy czujnik jest na liście', () => {",
+                      "    const id = Number(pm.collectionVariables.get('czujnik_id'));",
+                      "    pm.expect(pm.response.json().map((c) => c.id)).to.include(id);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Usuń czujnik (force=true) → 200",
+              "id": "5d85df98-693d-563b-bf06-09eb5c4527fa",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/czujniki/{{czujnik_id}}?force=true",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "7. Użytkownicy i CORS",
+          "id": "54511be5-4674-5515-ad69-c4c282c972df",
+          "description": "Wyliczanie użytkowników (enumeracja) i nagłówki CORS. Zmienna środowiska `ochrona_uzytkownikow`: `nie` przed dodaniem mu-pluginu, `tak` po.",
+          "item": [
+            {
+              "name": "Lista użytkowników — anonim",
+              "id": "575ea95a-eede-56ac-a1ad-5656d5b03b3c",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/users",
+                "description": "Bez ochrony anonim widzi autorów, a `slug` to zwykle login (ułatwia atak na hasło). Po mu-pluginie `pss-ochrona-uzytkownikow.php` trasa znika: 404 `rest_no_route`."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.variables.get('ochrona_uzytkownikow') === 'nie') {",
+                      "    pm.test('Bez ochrony: 200 i widoczne slugi (loginy!)', () => {",
+                      "        pm.response.to.have.status(200);",
+                      "        pm.expect(pm.response.json()[0]).to.have.property('slug');",
+                      "    });",
+                      "} else {",
+                      "    pm.test('Z ochroną: 404 rest_no_route', () => {",
+                      "        pm.response.to.have.status(404);",
+                      "        pm.expect(pm.response.json().code).to.eql('rest_no_route');",
+                      "    });",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lista użytkowników — Application Password",
+              "id": "1125892b-ed7e-543a-8564-cb8ec74f39db",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/users",
+                "description": "Zalogowani nadal korzystają z trasy.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Co najmniej 2 użytkowników (admin i redaktor)', () => pm.expect(pm.response.json().length).to.be.at.least(2));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "CORS — Origin obcej strony",
+              "id": "6ce89d7d-3b5e-52f9-bccb-ae8d0445b763",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "http://evil.example"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/wp/v2/posts?per_page=1",
+                "description": "WordPress odbija każdy `Origin` i pozwala na ciasteczka — przed CSRF chroni nonce, nie CORS."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Access-Control-Allow-Origin = Origin z żądania', () => {",
+                      "    pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql('http://evil.example');",
+                      "});",
+                      "pm.test('Nagłówki paginacji są wystawione dla przeglądarki', () => {",
+                      "    pm.expect(pm.response.headers.get('Access-Control-Expose-Headers')).to.include('X-WP-Total');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LAB 06 — wtyczka pss-zgloszenia",
+      "id": "f522bdc0-9c18-5494-acf0-917e35328140",
+      "description": "Własny endpoint REST: walidacja, uprawnienia, nonce, pliki, e-mail.",
+      "item": [
+        {
+          "name": "1. Trasy i formularz",
+          "id": "fc1f5808-4721-51e3-b473-06d2a86270e8",
+          "description": "Przestrzeń `pss/v1`, strona z shortcode `[pss_formularz]` i nonce.",
+          "item": [
+            {
+              "name": "Przestrzeń pss/v1",
+              "id": "363b110f-a961-5f8c-adf8-6f4a8fda8a49",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1",
+                "description": "Indeks przestrzeni nazw wtyczki — szybki test, czy wtyczka jest aktywna."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Jest trasa /pss/v1/zgloszenia', () => pm.expect(pm.response.json().routes).to.have.property('/pss/v1/zgloszenia'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Zgłoszeń nie ma w /wp/v2 → 404",
+              "id": "28362ec7-f128-541e-9eb1-ea2cc28c0475",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/wp/v2/psszg_zgloszenie",
+                "description": "Typ wpisu zgłoszeń ma `show_in_rest => false` — dane osobowe są tylko w `pss/v1` (dla administratora)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                      "pm.test('Kod błędu WordPressa: rest_no_route', () => pm.expect(pm.response.json().code).to.eql('rest_no_route'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Strona z formularzem (shortcode)",
+              "id": "2a1de437-bc93-5b7e-84c0-aaf5053d1fdc",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}{{formularz_path}}",
+                "description": "Szablon „Strona z formularzem” (motyw pss-motyw) + shortcode. Z HTML wyciągamy nonce REST, który strona przekazuje do JavaScriptu (obiekt `PSSZG`)."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200 i HTML', () => {",
+                      "    pm.response.to.have.status(200);",
+                      "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                      "});",
+                      "const html = pm.response.text();",
+                      "pm.test('Shortcode wyrenderował formularz', () => pm.expect(html).to.include('class=\"psszg-formularz\"'));",
+                      "pm.test('Szablon motywu pss-motyw jest użyty', () => pm.expect(html).to.include('Odpowiadamy w ciągu 2 dni roboczych'));",
+                      "const dane = html.match(/const PSSZG = (\\{.*?\\});/);",
+                      "pm.test('Strona przekazuje do JS adres API i nonce', () => pm.expect(dane).to.not.be.null);",
+                      "if (dane) {",
+                      "    const psszg = JSON.parse(dane[1]);",
+                      "    pm.collectionVariables.set('nonce', psszg.nonce);",
+                      "    pm.test('Adres w PSSZG wskazuje /pss/v1/zgloszenia', () => pm.expect(psszg.url).to.include('/pss/v1/zgloszenia'));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "2. POST /pss/v1/zgloszenia",
+          "id": "ec197b56-d8a4-5fd6-a023-4f5215d5c600",
+          "description": "Publiczny endpoint: walidacja schematu, nonce gościa, załącznik.",
+          "item": [
+            {
+              "name": "Nowe zgłoszenie (JSON + nonce gościa) → 201",
+              "id": "22c52171-937f-5137-b284-fc4406062037",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-WP-Nonce",
+                    "value": "{{nonce}}"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "Tak wysyła dane formularz na stronie (fetch + nagłówek `X-WP-Nonce`). Klient API może pominąć nonce.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"imie\": \"Anna\",\n  \"email\": \"anna.nowak@example.com\",\n  \"temat\": \"Czujnik T-01 nie odpowiada\",\n  \"tresc\": \"Od rana brak nowych pomiarów z czujnika T-01 w sali 2.14.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                      "const zg = pm.response.json();",
+                      "pm.collectionVariables.set('zgloszenie_id', zg.id);",
+                      "pm.test('Location = /pss/v1/zgloszenia/<id>', () => {",
+                      "    pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/pss/v1/zgloszenia/' + zg.id + '$'));",
+                      "});",
+                      "",
+                      "const schemat = {",
+                      "    type: 'object',",
+                      "    required: ['id', 'imie', 'email', 'temat', 'tresc', 'utworzono', 'zalacznik'],",
+                      "    additionalProperties: false,",
+                      "    properties: {",
+                      "        id: { type: 'integer' },",
+                      "        imie: { type: 'string', minLength: 2 },",
+                      "        email: { type: 'string', format: 'email' },",
+                      "        temat: { type: 'string', minLength: 3 },",
+                      "        tresc: { type: 'string', minLength: 10 },",
+                      "        utworzono: { type: 'string', format: 'date-time' },",
+                      "        zalacznik: { type: ['string', 'null'] }",
+                      "    }",
+                      "};",
+                      "",
+                      "pm.test('Odpowiedź zgodna ze schematem zgłoszenia', () => pm.response.to.have.jsonSchema(schemat));",
+                      "pm.test('Bez załącznika: zalacznik = null', () => pm.expect(zg.zalacznik).to.be.null);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Błędny nonce → 403",
+              "id": "1a08ecda-6345-59df-91b3-9196c1f04038",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-WP-Nonce",
+                    "value": "zly-nonce"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "Nonce sprawdza sam WordPress (także dla gościa). Nieaktualna strona → 403, JS prosi o odświeżenie.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"imie\": \"Anna\",\n  \"email\": \"anna.nowak@example.com\",\n  \"temat\": \"Test nonce\",\n  \"tresc\": \"To zgłoszenie nie powinno zostać zapisane.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 403', () => pm.response.to.have.status(403));",
+                      "pm.test('Kod błędu WordPressa: rest_cookie_invalid_nonce', () => pm.expect(pm.response.json().code).to.eql('rest_cookie_invalid_nonce'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Brak pól → 400",
+              "id": "d9ddfafb-8004-53eb-b486-fbd56bf271ef",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('Kod błędu WordPressa: rest_missing_callback_param', () => pm.expect(pm.response.json().code).to.eql('rest_missing_callback_param'));",
+                      "",
+                      "pm.test('Lista brakujących pól', () => pm.expect(pm.response.json().data.params).to.include.members(['imie', 'email', 'temat', 'tresc']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Złe dane → 400 (szczegóły pól)",
+              "id": "45df7fa0-b03b-51cd-85ba-012a0a5f2082",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "Walidacja ze schematu działa, bo każde pole ma `validate_callback => rest_validate_request_arg`.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"imie\": \"A\",\n  \"email\": \"nie-email\",\n  \"temat\": \"Aw\",\n  \"tresc\": \"krótko\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('Kod błędu WordPressa: rest_invalid_param', () => pm.expect(pm.response.json().code).to.eql('rest_invalid_param'));",
+                      "",
+                      "const szczegoly = pm.response.json().data.details;",
+                      "pm.test('email: rest_invalid_email', () => pm.expect(szczegoly.email.code).to.eql('rest_invalid_email'));",
+                      "pm.test('tresc: rest_too_short', () => pm.expect(szczegoly.tresc.code).to.eql('rest_too_short'));",
+                      "pm.test('imie: rest_too_short', () => pm.expect(szczegoly.imie.code).to.eql('rest_too_short'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Pole z samych spacji → 400",
+              "id": "4631e570-5fb5-53e0-98cd-b0bdaec1b262",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "Po sanityzacji (`sanitize_textarea_field`) treść jest pusta — wtyczka sprawdza to drugi raz.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"imie\": \"Anna\",\n  \"email\": \"anna.nowak@example.com\",\n  \"temat\": \"Test\",\n  \"tresc\": \"<b></b><i></i><u></u>\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('Kod błędu WordPressa: psszg_puste_pole', () => pm.expect(pm.response.json().code).to.eql('psszg_puste_pole'));",
+                      "",
+                      "pm.test('Błąd dotyczy pola tresc', () => pm.expect(pm.response.json().data.params).to.have.property('tresc'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Załącznik TXT (multipart) → 201",
+              "id": "22f0b65e-a339-58a5-89b2-f37b22829fd8",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "`multipart/form-data`: pola tekstowe + plik `zalacznik`. Wtyczka nadaje plikowi losową nazwę.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "imie",
+                      "value": "Anna",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "anna.nowak@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "temat",
+                      "value": "Raport z czujnika T-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "tresc",
+                      "value": "Raport z pomiarów czujnika T-01 w załączniku.",
+                      "type": "text"
+                    },
+                    {
+                      "key": "zalacznik",
+                      "type": "file",
+                      "src": "pliki-testowe/raport.txt"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                      "pm.test('Załącznik ma losową nazwę .txt w uploads', () => {",
+                      "    pm.expect(pm.response.json().zalacznik).to.match(/\\/wp-content\\/uploads\\/.+\\/zgloszenie-[0-9a-f-]{36}\\.txt$/);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Załącznik .php → 415",
+              "id": "107a2f53-1af1-5ccf-9854-bfb1ab685204",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "imie",
+                      "value": "Anna",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "anna.nowak@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "temat",
+                      "value": "Raport z czujnika T-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "tresc",
+                      "value": "Raport z pomiarów czujnika T-01 w załączniku.",
+                      "type": "text"
+                    },
+                    {
+                      "key": "zalacznik",
+                      "type": "file",
+                      "src": "pliki-testowe/niebezpieczny.php"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 415', () => pm.response.to.have.status(415));",
+                      "pm.test('Kod błędu WordPressa: psszg_niedozwolony_typ', () => pm.expect(pm.response.json().code).to.eql('psszg_niedozwolony_typ'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Tekst udający PNG → 415",
+              "id": "a7382ad8-847a-51bc-9649-4556c0471f4c",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "Typ jest sprawdzany po zawartości pliku (`wp_check_filetype_and_ext`), nie tylko po rozszerzeniu.",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "imie",
+                      "value": "Anna",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "anna.nowak@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "temat",
+                      "value": "Raport z czujnika T-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "tresc",
+                      "value": "Raport z pomiarów czujnika T-01 w załączniku.",
+                      "type": "text"
+                    },
+                    {
+                      "key": "zalacznik",
+                      "type": "file",
+                      "src": "pliki-testowe/udawany-obraz.png"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 415', () => pm.response.to.have.status(415));",
+                      "pm.test('Kod błędu WordPressa: psszg_niedozwolony_typ', () => pm.expect(pm.response.json().code).to.eql('psszg_niedozwolony_typ'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Plik > 1 MB → 413",
+              "id": "13c60366-12e7-5dc8-928f-fba7c9c834f9",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "imie",
+                      "value": "Anna",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "anna.nowak@example.com",
+                      "type": "text"
+                    },
+                    {
+                      "key": "temat",
+                      "value": "Raport z czujnika T-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "tresc",
+                      "value": "Raport z pomiarów czujnika T-01 w załączniku.",
+                      "type": "text"
+                    },
+                    {
+                      "key": "zalacznik",
+                      "type": "file",
+                      "src": "pliki-testowe/za-duzy.txt"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 413', () => pm.response.to.have.status(413));",
+                      "pm.test('Kod błędu WordPressa: psszg_za_duzy_plik', () => pm.expect(pm.response.json().code).to.eql('psszg_za_duzy_plik'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "E-mail z powiadomieniem w Mailpicie",
+              "id": "baf130f4-f796-5e1b-a84e-55633f8d9b53",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{mailpit_url}}/api/v1/messages?limit=50",
+                "description": "Po zapisaniu zgłoszenia wtyczka wysyła e-mail (wp_mail → SMTP → Mailpit). Sprawdzamy przez API Mailpita."
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "const id = pm.collectionVariables.get('zgloszenie_id');",
+                      "const mail = pm.response.json().messages.find((m) => m.Subject.includes('Nowe zgłoszenie #' + id + ':'));",
+                      "pm.test('Jest e-mail o zgłoszeniu #' + id, () => pm.expect(mail).to.not.be.undefined);",
+                      "pm.test('Odpowiedź (Reply-To) trafi do osoby zgłaszającej', () => {",
+                      "    pm.expect(mail.ReplyTo.map((a) => a.Address)).to.include('anna.nowak@example.com');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "3. GET — tylko administrator",
+          "id": "5e6c1c80-e1c8-5ccc-9204-306d46e40ca9",
+          "description": "`permission_callback`: anonim 401, zalogowany bez uprawnień 403, admin 200.",
+          "item": [
+            {
+              "name": "Lista zgłoszeń — anonim → 401",
+              "id": "51ab278c-060c-5b96-841b-aa82b7dc4f65",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": ""
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                      "pm.test('Kod błędu WordPressa: rest_forbidden', () => pm.expect(pm.response.json().code).to.eql('rest_forbidden'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lista zgłoszeń — redaktor → 403",
+              "id": "c7e13675-fed7-540f-9244-c1c7ac94dc97",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{redaktor_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{redaktor_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 403', () => pm.response.to.have.status(403));",
+                      "pm.test('Kod błędu WordPressa: rest_forbidden', () => pm.expect(pm.response.json().code).to.eql('rest_forbidden'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Lista zgłoszeń — administrator → 200",
+              "id": "c4fcc9e7-0c7e-5cf0-a288-f89ca9f1a4dd",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia?per_page=5",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('Nagłówki paginacji jak w rdzeniu', () => {",
+                      "    pm.expect(Number(pm.response.headers.get('X-WP-Total'))).to.be.at.least(1);",
+                      "    pm.expect(Number(pm.response.headers.get('X-WP-TotalPages'))).to.be.at.least(1);",
+                      "});",
+                      "",
+                      "const schemat = {",
+                      "    type: 'object',",
+                      "    required: ['id', 'imie', 'email', 'temat', 'tresc', 'utworzono', 'zalacznik'],",
+                      "    additionalProperties: false,",
+                      "    properties: {",
+                      "        id: { type: 'integer' },",
+                      "        imie: { type: 'string', minLength: 2 },",
+                      "        email: { type: 'string', format: 'email' },",
+                      "        temat: { type: 'string', minLength: 3 },",
+                      "        tresc: { type: 'string', minLength: 10 },",
+                      "        utworzono: { type: 'string', format: 'date-time' },",
+                      "        zalacznik: { type: ['string', 'null'] }",
+                      "    }",
+                      "};",
+                      "",
+                      "pm.test('Każde zgłoszenie zgodne ze schematem', () => pm.response.to.have.jsonSchema({ type: 'array', items: schemat }));",
+                      "pm.test('Najnowsze zgłoszenia są pierwsze', () => {",
+                      "    const daty = pm.response.json().map((z) => z.utworzono);",
+                      "    pm.expect(daty).to.eql([...daty].sort().reverse());",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Jedno zgłoszenie — administrator → 200",
+              "id": "59f5b0f6-5e2f-52e0-a38c-c40dc4437ec3",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia/{{zgloszenie_id}}",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('To zgłoszenie utworzone wcześniej', () => {",
+                      "    pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('zgloszenie_id')));",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Nieistniejące zgłoszenie → 404",
+              "id": "211b5254-d833-5aa0-9238-96722799b74b",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia/999999",
+                "description": "",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                      "pm.test('Kod błędu WordPressa: psszg_nie_znaleziono', () => pm.expect(pm.response.json().code).to.eql('psszg_nie_znaleziono'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Identyfikator nie jest liczbą → 404",
+              "id": "67708a6c-f6c1-54ba-b09c-c4a2fe573399",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{wp_url}}/wp-json/pss/v1/zgloszenia/abc",
+                "description": "Wzorzec trasy `(?P<id>\\d+)` nie pasuje, więc WordPress nie znajduje trasy.",
+                "auth": {
+                  "type": "basic",
+                  "basic": [
+                    {
+                      "key": "username",
+                      "value": "{{admin_user}}",
+                      "type": "string"
+                    },
+                    {
+                      "key": "password",
+                      "value": "{{admin_app_password}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                      "pm.test('Kod błędu WordPressa: rest_no_route', () => pm.expect(pm.response.json().code).to.eql('rest_no_route'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "post_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "media_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "media2_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "czujnik_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nonce",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "zgloszenie_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

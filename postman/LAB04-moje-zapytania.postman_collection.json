@@ -1,0 +1,115 @@
+{
+  "info": {
+    "_postman_id": "4028ae3e-8592-4e3a-a0d3-7d71808efd03",
+    "name": "LAB04 - moje zapytania",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "60004886",
+    "_collection_link": "https://go.postman.co/collection/60004886-4028ae3e-8592-4e3a-a0d3-7d71808efd03?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "a",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{wp_url}}/wp-json/",
+          "host": [
+            "{{wp_url}}"
+          ],
+          "path": [
+            "wp-json",
+            ""
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "d",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "e",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "g",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "h",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "f",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "c",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "b-lista_wpisow",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{wp_url}}/wp-json/wp/v2/posts",
+          "host": [
+            "{{wp_url}}"
+          ],
+          "path": [
+            "wp-json",
+            "wp",
+            "v2",
+            "posts"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

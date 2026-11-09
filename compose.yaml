@@ -1,0 +1,93 @@
+# wp-lab — WordPress + MariaDB + Mailpit + Adminer (+ WP-CLI uruchamiany na żądanie)
+# Projektowanie serwisów sieciowych, LAB 04–06 i 13. TYLKO do pracy lokalnej (hasła są jawne)!
+#
+# Start:    docker compose up -d
+# Stan:     docker compose ps
+# WP-CLI:   docker compose run --rm wpcli wp <polecenie>
+# Logi PHP: docker compose logs -f wordpress
+# Stop:     docker compose down        (dane zostają w wolumenach)
+# Reset:    docker compose down -v     (USUWA bazę i pliki WordPressa)
+#
+# Porty można zmienić zmiennymi (np. gdy 8080 jest zajęty): WP_PORT, ADMINER_PORT, MAILPIT_UI_PORT, MAILPIT_SMTP_PORT.
+name: wp-lab
+
+# Wspólne zmienne dla kontenerów „wordpress” i „wpcli” (oba czytają ten sam wp-config.php)
+x-wp-env: &wp-env
+  WORDPRESS_DB_HOST: db
+  WORDPRESS_DB_NAME: wordpress
+  WORDPRESS_DB_USER: wordpress
+  WORDPRESS_DB_PASSWORD: wordpress          # hasło tylko dla środowiska lokalnego!
+  WP_ENVIRONMENT_TYPE: local                # hasła aplikacji (Application Passwords) działają bez HTTPS
+  WORDPRESS_DEBUG: "1"                      # WP_DEBUG = true: błędy PHP w „docker compose logs wordpress”
+  WORDPRESS_CONFIG_EXTRA: |
+    define( 'WP_DEBUG_DISPLAY', false );    // błędy PHP nie psują odpowiedzi JSON
+    define( 'DISALLOW_FILE_EDIT', true );   // brak edytora plików motywów i wtyczek w panelu
+
+services:
+  db:
+    image: mariadb:12.3                     # MariaDB LTS (tag „lts” = 12.3)
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  wordpress:
+    image: wordpress:7.1-php8.3-apache      # WordPress 7.1.x, PHP 8.3, Apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${WP_PORT:-8080}:80"
+    environment: *wp-env
+    volumes:
+      - wp_data:/var/www/html
+      - ./mu-plugins:/var/www/html/wp-content/mu-plugins                         # LAB 04–05
+    healthcheck:
+      # „healthy” = pliki WordPressa są już skopiowane do wolumenu (wp-config.php powstaje na końcu)
+      test: ["CMD", "test", "-f", "/var/www/html/wp-config.php"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  wpcli:
+    image: wordpress:cli-2.12-php8.3        # WP-CLI 2.12 (Alpine)
+    profiles: ["tools"]                     # nie startuje przy „docker compose up”
+    user: "33:33"                           # www-data z obrazu „wordpress” (Debian), nie 82 z Alpine
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_healthy
+    environment:
+      <<: *wp-env
+      HOME: /tmp
+    volumes:
+      - wp_data:/var/www/html
+      - ./mu-plugins:/var/www/html/wp-content/mu-plugins
+      - ./backup:/backup                    # kopie zapasowe (wp db export, tar)
+
+  mailpit:
+    image: axllent/mailpit:v1.31            # skrzynka testowa: UI i API 8025, SMTP 1025
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+
+  adminer:
+    image: adminer:6                        # podgląd bazy: serwer „db”, użytkownik/hasło „wordpress”
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+
+volumes:
+  db_data:
+  wp_data:
